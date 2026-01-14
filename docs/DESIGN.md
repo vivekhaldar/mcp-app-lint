@@ -418,6 +418,8 @@ import type { ServerInfo } from '../types/report.js';
 export interface MCPClientConfig {
   url: string;
   timeout: number;
+  /** Optional headers for authentication (e.g., Bearer tokens) */
+  headers?: Record<string, string>;
 }
 
 export interface Tool {
@@ -470,21 +472,36 @@ export class MCPClient {
    * Returns server info on success, throws on failure.
    */
   async connect(): Promise<ServerInfo> {
-    const transport = new SSEClientTransport(new URL(this.config.url));
+    const url = new URL(this.config.url);
 
-    await this.client.connect(transport);
+    // Create transport with optional auth headers
+    const transportOptions: { eventSourceInit?: { headers: Record<string, string> } } = {};
+    if (this.config.headers && Object.keys(this.config.headers).length > 0) {
+      transportOptions.eventSourceInit = { headers: this.config.headers };
+    }
+    const transport = new SSEClientTransport(url, transportOptions);
 
-    // The SDK handles the initialize handshake internally
-    // We can access server info from the client after connection
-    const info = this.client.getServerVersion();
+    // Apply timeout to connection using AbortController
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.config.timeout);
 
-    this.serverInfo = {
-      name: info?.name,
-      version: info?.version,
-      protocolVersion: info?.protocolVersion,
-    };
+    try {
+      await this.client.connect(transport);
 
-    return this.serverInfo;
+      // The SDK handles the initialize handshake internally
+      // We can access server info from the client after connection
+      const info = this.client.getServerVersion();
+
+      this.serverInfo = {
+        name: info?.name,
+        version: info?.version,
+        protocolVersion: info?.protocolVersion,
+      };
+
+      return this.serverInfo;
+    } finally {
+      clearTimeout(timeoutId);
+    }
   }
 
   /**
@@ -628,8 +645,10 @@ import type { Validator } from './base.js';
 export interface ValidatorConfig {
   /** Only check these tools (empty = all) */
   toolFilter: string[];
-  /** Skip tool execution phase */
+  /** Skip tool execution phase (DEFAULT: true for safety) */
   skipExecution: boolean;
+  /** Only execute tools with readOnlyHint=true */
+  executeSafeOnly: boolean;
   /** Skip content validation phase */
   skipContent: boolean;
   /** Request timeout in ms */
@@ -657,13 +676,15 @@ export interface ValidationContext {
 export async function runValidationPipeline(
   client: MCPClient,
   config: ValidatorConfig,
-  validators: Validator[]
+  validators: Validator[],
+  ctx?: ValidationContext
 ): Promise<CheckResult[]> {
-  const ctx: ValidationContext = { client, config };
+  // Use provided context or create a new one
+  const validationCtx: ValidationContext = ctx ?? { client, config };
   const allResults: CheckResult[] = [];
 
   for (const validator of validators) {
-    const results = await validator.run(ctx);
+    const results = await validator.run(validationCtx);
     allResults.push(...results);
 
     // If protocol validation fails with errors, stop early
@@ -774,8 +795,12 @@ export class ProtocolValidator extends Validator {
         }));
 
         // PROTO_002: Protocol version is recent enough
+        // Parse as date for robust comparison (format: YYYY-MM-DD)
         const version = serverInfo.protocolVersion;
-        const isRecent = version >= '2024-11-05';
+        const minVersion = '2024-11-05';
+        const versionDate = Date.parse(version);
+        const minDate = Date.parse(minVersion);
+        const isRecent = !isNaN(versionDate) && !isNaN(minDate) && versionDate >= minDate;
         if (isRecent) {
           results.push(this.pass('PROTO_002', `Protocol version ${version} meets minimum requirement`, {
             severity: 'warn',
@@ -1165,16 +1190,16 @@ export class ResourceValidator extends Validator {
       }
     }
 
-    // RES_004: Has human-readable name
+    // RES_004: Has human-readable name (required per MCP spec)
     if (resource.name && resource.name.length > 0) {
       results.push(this.pass('RES_004', 'Has human-readable name', {
-        severity: 'warn',
+        severity: 'error',
         target,
       }));
     } else {
-      results.push(this.fail('RES_004', 'warn', 'Missing human-readable name', {
+      results.push(this.fail('RES_004', 'error', 'Missing required name field', {
         target,
-        suggestion: 'Add a name field to improve discoverability',
+        suggestion: 'Add a name field (required by MCP specification)',
       }));
     }
 
@@ -1222,8 +1247,10 @@ export class ExecutionValidator extends Validator {
   async run(ctx: ValidationContext): Promise<CheckResult[]> {
     const results: CheckResult[] = [];
 
+    // SAFETY: Tool execution is opt-in by default to prevent destructive side effects
     if (ctx.config.skipExecution) {
-      results.push(this.pass('EXEC_SKIP', 'Tool execution skipped by user', {
+      results.push(this.pass('EXEC_SKIP',
+        'Tool execution skipped (use --execute or --execute-safe to enable)', {
         severity: 'info',
       }));
       return results;
@@ -1245,10 +1272,24 @@ export class ExecutionValidator extends Validator {
 
       const target = tool.name;
 
+      // SAFETY: If executeSafeOnly is set, skip tools without readOnlyHint=true
+      if (ctx.config.executeSafeOnly) {
+        const readOnlyHint = tool.annotations?.readOnlyHint;
+        if (readOnlyHint !== true) {
+          results.push(this.pass('EXEC_SKIP_UNSAFE',
+            `Skipped tool '${target}' (not marked readOnlyHint=true)`, {
+            severity: 'info',
+            target,
+          }));
+          continue;
+        }
+      }
+
       // EXEC_001: Tool call succeeds
       try {
-        // Call with empty args (minimal test)
-        // In a more sophisticated version, we'd generate test args from inputSchema
+        // Call with empty args for tools with no required parameters.
+        // For tools with required params, this may fail - which is itself useful validation.
+        // Future enhancement: generate minimal args from JSON Schema or use fixtures.
         const response = await ctx.client.callTool(tool.name, {});
         ctx.toolResponses.set(tool.name, response);
 
@@ -1417,8 +1458,8 @@ export class ContentValidator extends Validator {
           continue;
         }
 
-        // Get HTML content
-        const html = content.text || (content.blob ? atob(content.blob) : '');
+        // Get HTML content (use Buffer.from for Node.js compatibility)
+        const html = content.text || (content.blob ? Buffer.from(content.blob, 'base64').toString('utf-8') : '');
 
         // READ_004: Valid HTML5
         const parseResult = this.parseHTML(html);
@@ -1865,10 +1906,12 @@ import type { ConformanceReport } from '../types/report.js';
 export class JUnitReporter implements Reporter {
   format(report: ConformanceReport): string {
     const failures = report.checks.filter(c => !c.passed && c.severity === 'error').length;
+    // JUnit counts both failures and errors; we map warnings to failures with type="warning"
+    const warnings = report.checks.filter(c => !c.passed && c.severity === 'warn').length;
     const tests = report.summary.totalChecks;
 
     let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
-    xml += `<testsuite name="ChatGPT Apps SDK Conformance" tests="${tests}" failures="${failures}" time="${report.durationMs / 1000}">\n`;
+    xml += `<testsuite name="ChatGPT Apps SDK Conformance" tests="${tests}" failures="${failures + warnings}" time="${report.durationMs / 1000}">\n`;
 
     for (const check of report.checks) {
       const className = `conformance.${check.category}`;
@@ -1877,15 +1920,17 @@ export class JUnitReporter implements Reporter {
       xml += `  <testcase classname="${this.escape(className)}" name="${this.escape(testName)}">\n`;
 
       if (!check.passed) {
-        const type = check.severity === 'error' ? 'failure' : 'warning';
-        xml += `    <${type} message="${this.escape(check.message)}">\n`;
+        // Use standard JUnit elements: <failure> for errors and warnings
+        // Use type attribute to distinguish severity
+        const failureType = check.severity === 'error' ? 'error' : 'warning';
+        xml += `    <failure type="${failureType}" message="${this.escape(check.message)}">\n`;
         if (check.suggestion) {
           xml += `      Suggestion: ${this.escape(check.suggestion)}\n`;
         }
         if (check.details) {
           xml += `      Details: ${this.escape(JSON.stringify(check.details))}\n`;
         }
-        xml += `    </${type}>\n`;
+        xml += `    </failure>\n`;
       }
 
       xml += `  </testcase>\n`;
@@ -1942,6 +1987,12 @@ export interface CLIOptions {
   skipContent: boolean;
   timeout: number;
   noColor: boolean;
+  /** Authorization header value (e.g., Bearer token) */
+  auth?: string;
+  /** Custom headers as key:value pairs */
+  headers: Record<string, string>;
+  /** Enable tool execution (off by default for safety) */
+  execute: boolean;
 }
 
 export interface ParsedArgs {
@@ -1962,15 +2013,38 @@ export function parseArgs(argv: string[]): ParsedArgs {
     .option('-v, --verbose', 'Show all checks including passed ones', false)
     .option('-q, --quiet', 'Only show errors', false)
     .option('--tools <names>', 'Only check specific tools (comma-separated)', '')
-    .option('--skip-execution', 'Skip tool execution tests', false)
     .option('--skip-content', 'Skip content validation', false)
+    .option('--execute', 'Enable tool execution (disabled by default for safety)', false)
+    .option('--execute-safe', 'Execute only tools marked readOnlyHint=true', false)
     .option('--timeout <ms>', 'Request timeout in milliseconds', '10000')
-    .option('--no-color', 'Disable colored output', false);
+    .option('--no-color', 'Disable colored output', false)
+    .option('--auth <token>', 'Authorization header value (e.g., Bearer token)')
+    .option('-H, --header <header>', 'Custom header as key:value (repeatable)', (val, prev: string[]) => {
+      prev.push(val);
+      return prev;
+    }, []);
 
   program.parse(argv);
 
   const url = program.args[0];
   const opts = program.opts();
+
+  // Parse headers from -H options
+  const headers: Record<string, string> = {};
+  for (const h of opts.header as string[]) {
+    const colonIdx = h.indexOf(':');
+    if (colonIdx > 0) {
+      headers[h.slice(0, colonIdx).trim()] = h.slice(colonIdx + 1).trim();
+    }
+  }
+
+  // Add auth header if provided
+  if (opts.auth) {
+    headers['Authorization'] = opts.auth;
+  }
+
+  // Execution is DISABLED by default for safety (critique: tool execution should be opt-in)
+  const skipExecution = !opts.execute && !opts.executeSafe;
 
   return {
     url,
@@ -1980,10 +2054,13 @@ export function parseArgs(argv: string[]): ParsedArgs {
       verbose: opts.verbose,
       quiet: opts.quiet,
       tools: opts.tools ? opts.tools.split(',').map((t: string) => t.trim()) : [],
-      skipExecution: opts.skipExecution,
+      skipExecution,
       skipContent: opts.skipContent,
       timeout: parseInt(opts.timeout, 10),
       noColor: !opts.color,
+      auth: opts.auth,
+      headers,
+      execute: opts.execute || opts.executeSafe,
     },
   };
 }
@@ -2033,8 +2110,12 @@ async function main(): Promise<number> {
     chalk.level = 0;
   }
 
-  // Create client
-  const client = new MCPClient({ url, timeout: options.timeout });
+  // Create client with auth headers if provided
+  const client = new MCPClient({
+    url,
+    timeout: options.timeout,
+    headers: options.headers,
+  });
 
   // Build validator pipeline
   const validators = [
@@ -2048,17 +2129,34 @@ async function main(): Promise<number> {
 
   // Run validation
   const config = toValidatorConfig(options);
+
+  // Create context that will be populated by validators
+  const ctx: ValidationContext = { client, config };
   let checks: CheckResult[];
+  let connectionFailed = false;
 
   try {
-    checks = await runValidationPipeline(client, config, validators);
+    checks = await runValidationPipeline(client, config, validators, ctx);
+
+    // Check if connection/protocol failed (should return exit code 3)
+    const connFailed = checks.some(c =>
+      c.id.startsWith('CONN_') && !c.passed && c.severity === 'error'
+    );
+    if (connFailed) {
+      connectionFailed = true;
+    }
+  } catch (error) {
+    // Fatal connection error - exit code 3
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(chalk.red('Connection failed:'), message);
+    return 3;
   } finally {
     await client.close();
   }
 
-  // Build report
+  // Build report using context data
   const endTime = Date.now();
-  const report = buildReport(url, checks, endTime - startTime);
+  const report = buildReport(url, checks, endTime - startTime, ctx);
 
   // Format and output
   const reporter = await ReporterFactory.create(options.format);
@@ -2071,7 +2169,10 @@ async function main(): Promise<number> {
     console.log(output);
   }
 
-  // Return exit code based on verdict
+  // Return exit code based on verdict (exit code 3 for connection failures)
+  if (connectionFailed) {
+    return 3;
+  }
   switch (report.verdict) {
     case 'conformant': return 0;
     case 'conformant_with_warnings': return 1;
@@ -2079,7 +2180,12 @@ async function main(): Promise<number> {
   }
 }
 
-function buildReport(url: string, checks: CheckResult[], durationMs: number): ConformanceReport {
+function buildReport(
+  url: string,
+  checks: CheckResult[],
+  durationMs: number,
+  ctx: ValidationContext
+): ConformanceReport {
   const errors = checks.filter(c => !c.passed && c.severity === 'error').length;
   const warnings = checks.filter(c => !c.passed && c.severity === 'warn').length;
   const info = checks.filter(c => c.severity === 'info').length;
@@ -2094,9 +2200,27 @@ function buildReport(url: string, checks: CheckResult[], durationMs: number): Co
     verdict = 'conformant';
   }
 
-  // Extract server info from protocol checks
-  const serverInfoCheck = checks.find(c => c.id === 'PROTO_003');
-  const serverInfo = (serverInfoCheck?.details as { serverInfo?: object })?.serverInfo ?? {};
+  // Extract server info from context (populated by protocol validator)
+  const serverInfo = ctx.serverInfo ?? {};
+
+  // Build tool and resource info from context
+  const tools: ToolInfo[] = (ctx.tools ?? []).map(t => {
+    const meta = getMeta(t.raw);
+    const outputTemplate = meta?.['openai/outputTemplate'] as string | undefined;
+    return {
+      name: t.name,
+      description: t.description,
+      hasOutputTemplate: !!outputTemplate,
+      outputTemplateUri: outputTemplate,
+    };
+  });
+
+  const resources: ResourceInfo[] = (ctx.resources ?? []).map(r => ({
+    uri: r.uri,
+    name: r.name,
+    mimeType: r.mimeType,
+    isWidget: r.uri.startsWith('ui://widget/'),
+  }));
 
   return {
     serverUrl: url,
@@ -2109,14 +2233,21 @@ function buildReport(url: string, checks: CheckResult[], durationMs: number): Co
       warnings,
       errors,
       info,
-      toolCount: 0, // Would be populated from context
-      resourceCount: 0,
+      toolCount: ctx.tools?.length ?? 0,
+      resourceCount: ctx.resources?.length ?? 0,
     },
     verdict,
     checks,
-    tools: [],
-    resources: [],
+    tools,
+    resources,
   };
+}
+
+function getMeta(obj: unknown): Record<string, unknown> | undefined {
+  if (typeof obj === 'object' && obj !== null && '_meta' in obj) {
+    return (obj as Record<string, unknown>)._meta as Record<string, unknown>;
+  }
+  return undefined;
 }
 
 main()

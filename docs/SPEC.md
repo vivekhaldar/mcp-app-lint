@@ -126,7 +126,7 @@ VERDICT: CONFORMANT
 | `RES_001` | ERROR | `resources/list` returns valid response |
 | `RES_002` | **ERROR** | Widget resource uses `ui://widget/` URI scheme |
 | `RES_003` | **ERROR** | Widget resource has `text/html+skybridge` MIME type |
-| `RES_004` | WARN | Resource has human-readable `name` |
+| `RES_004` | ERROR | Resource has human-readable `name` (required by MCP spec) |
 | `RES_005` | INFO | Resource has `description` |
 | `RES_006` | INFO | Widget has `_meta.openai/widgetDescription` |
 | `RES_007` | INFO | Widget has `_meta.openai/widgetPrefersBorder` |
@@ -269,9 +269,12 @@ Options:
   -v, --verbose              Show all checks including passed ones
   -q, --quiet                Only show errors (no warnings or info)
   --tools <names>            Only check specific tools (comma-separated)
-  --skip-execution           Skip tool execution tests (tools/call)
+  --execute                  Enable tool execution (DISABLED by default for safety)
+  --execute-safe             Execute only tools marked readOnlyHint=true
   --skip-content             Skip content validation (HTML parsing)
   --timeout <ms>             Request timeout in milliseconds (default: 10000)
+  --auth <token>             Authorization header value (e.g., "Bearer <token>")
+  -H, --header <header>      Custom header as key:value (repeatable)
   --no-color                 Disable colored output
   -h, --help                 Show help
   --version                  Show version
