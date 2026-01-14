@@ -436,6 +436,81 @@ export class HtmlReporter implements Reporter {
     .badge.yes { background: var(--color-success-bg); color: var(--color-success); }
     .badge.no { background: #f3f4f6; color: var(--color-text-tertiary); }
 
+    /* Filters */
+    .filters {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 32px;
+      padding: 16px 20px;
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius);
+      flex-wrap: wrap;
+    }
+
+    .filters-label {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--color-text-secondary);
+    }
+
+    .filter-toggle {
+      cursor: pointer;
+    }
+
+    .filter-toggle input {
+      display: none;
+    }
+
+    .filter-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 6px 12px;
+      border-radius: 100px;
+      font-size: 13px;
+      font-weight: 500;
+      border: 1px solid var(--color-border);
+      background: var(--color-surface);
+      transition: all 0.15s ease;
+    }
+
+    .filter-toggle input:checked + .filter-btn.pass { background: var(--color-success-bg); border-color: var(--color-success); color: var(--color-success); }
+    .filter-toggle input:checked + .filter-btn.info { background: var(--color-info-bg); border-color: var(--color-info); color: var(--color-info); }
+    .filter-toggle input:checked + .filter-btn.warn { background: var(--color-warning-bg); border-color: var(--color-warning); color: var(--color-warning); }
+    .filter-toggle input:checked + .filter-btn.error { background: var(--color-error-bg); border-color: var(--color-error); color: var(--color-error); }
+
+    .filter-toggle input:not(:checked) + .filter-btn {
+      opacity: 0.5;
+    }
+
+    .filter-shortcut {
+      margin-left: auto;
+      padding: 6px 12px;
+      border-radius: 100px;
+      font-size: 13px;
+      font-weight: 500;
+      border: 1px solid var(--color-accent);
+      background: transparent;
+      color: var(--color-accent);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .filter-shortcut:hover {
+      background: var(--color-accent);
+      color: white;
+    }
+
+    .check-item.hidden {
+      display: none;
+    }
+
+    .check-group.hidden {
+      display: none;
+    }
+
     /* Footer */
     footer {
       margin-top: 64px;
@@ -514,6 +589,27 @@ export class HtmlReporter implements Reporter {
       </div>
     </div>
 
+    <div class="filters">
+      <span class="filters-label">Show:</span>
+      <label class="filter-toggle">
+        <input type="checkbox" id="filter-pass" checked>
+        <span class="filter-btn pass">✓ Passed</span>
+      </label>
+      <label class="filter-toggle">
+        <input type="checkbox" id="filter-info" checked>
+        <span class="filter-btn info">i Info</span>
+      </label>
+      <label class="filter-toggle">
+        <input type="checkbox" id="filter-warn" checked>
+        <span class="filter-btn warn">! Warnings</span>
+      </label>
+      <label class="filter-toggle">
+        <input type="checkbox" id="filter-error" checked>
+        <span class="filter-btn error">✗ Errors</span>
+      </label>
+      <button class="filter-shortcut" onclick="showOnlyIssues()">Show only issues</button>
+    </div>
+
     ${checksHtml}
 
     ${toolsHtml}
@@ -525,6 +621,44 @@ export class HtmlReporter implements Reporter {
       <a href="https://developers.openai.com/apps-sdk">OpenAI Apps SDK Documentation</a>
     </footer>
   </div>
+
+  <script>
+    function applyFilters() {
+      const showPass = document.getElementById('filter-pass').checked;
+      const showInfo = document.getElementById('filter-info').checked;
+      const showWarn = document.getElementById('filter-warn').checked;
+      const showError = document.getElementById('filter-error').checked;
+
+      document.querySelectorAll('.check-item').forEach(item => {
+        const status = item.dataset.status;
+        const visible =
+          (status === 'pass' && showPass) ||
+          (status === 'info' && showInfo) ||
+          (status === 'warn' && showWarn) ||
+          (status === 'error' && showError);
+        item.classList.toggle('hidden', !visible);
+      });
+
+      // Hide empty check groups
+      document.querySelectorAll('.check-group').forEach(group => {
+        const visibleItems = group.querySelectorAll('.check-item:not(.hidden)').length;
+        group.classList.toggle('hidden', visibleItems === 0);
+      });
+    }
+
+    function showOnlyIssues() {
+      document.getElementById('filter-pass').checked = false;
+      document.getElementById('filter-info').checked = true;
+      document.getElementById('filter-warn').checked = true;
+      document.getElementById('filter-error').checked = true;
+      applyFilters();
+    }
+
+    // Add event listeners
+    ['filter-pass', 'filter-info', 'filter-warn', 'filter-error'].forEach(id => {
+      document.getElementById(id).addEventListener('change', applyFilters);
+    });
+  </script>
 </body>
 </html>`;
   }
@@ -613,8 +747,10 @@ export class HtmlReporter implements Reporter {
           </div>`;
     }
 
+    const status = check.passed ? 'pass' : (check.severity === 'error' ? 'error' : check.severity === 'warn' ? 'warn' : 'info');
+
     return `
-          <li class="check-item">
+          <li class="check-item" data-status="${status}">
             <span class="check-icon ${iconClass}">${icon}</span>
             <div class="check-content">
               <div class="check-title">${this.escape(title)}</div>
