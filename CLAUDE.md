@@ -10,7 +10,7 @@ A CLI conformance checker that validates MCP servers against the OpenAI Apps SDK
 
 ## Current State
 
-**Planning phase** - only the specification exists. See [SPEC.md](./SPEC.md) for:
+**Planning phase** - only the specification exists. See [docs/SPEC.md](./docs/SPEC.md) for:
 - All validation checks (30+) with IDs like `TOOL_007`, `RES_003`
 - Severity levels (ERROR, WARN, INFO)
 - Output format examples
