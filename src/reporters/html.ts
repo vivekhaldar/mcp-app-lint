@@ -250,6 +250,7 @@ export class HtmlReporter implements Reporter {
     }
 
     .stat-value.success { color: var(--color-success); }
+    .stat-value.info { color: var(--color-info); }
     .stat-value.warning { color: var(--color-warning); }
     .stat-value.error { color: var(--color-error); }
 
@@ -488,12 +489,12 @@ export class HtmlReporter implements Reporter {
 
     <div class="stats">
       <div class="stat">
-        <div class="stat-value">${report.summary.totalChecks}</div>
-        <div class="stat-label">Checks Run</div>
-      </div>
-      <div class="stat">
         <div class="stat-value success">${report.summary.passed}</div>
         <div class="stat-label">Passed</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value info">${report.summary.info}</div>
+        <div class="stat-label">Info</div>
       </div>
       <div class="stat">
         <div class="stat-value warning">${report.summary.warnings}</div>

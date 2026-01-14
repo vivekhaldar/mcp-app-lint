@@ -107,7 +107,7 @@ function buildReport(
 ): ConformanceReport {
   const errors = checks.filter(c => !c.passed && c.severity === 'error').length;
   const warnings = checks.filter(c => !c.passed && c.severity === 'warn').length;
-  const info = checks.filter(c => c.severity === 'info').length;
+  const info = checks.filter(c => !c.passed && c.severity === 'info').length;
   const passed = checks.filter(c => c.passed).length;
 
   let verdict: Verdict;
