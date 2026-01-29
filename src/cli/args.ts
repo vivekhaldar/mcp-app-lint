@@ -3,8 +3,10 @@
 
 import { Command } from 'commander';
 import type { ValidatorConfig } from '../validators/index.js';
+import { getStandardNames } from '../standards/index.js';
 
 export type ReportFormat = 'text' | 'json' | 'markdown' | 'html' | 'junit';
+export type StandardName = 'openai' | 'mcp-apps';
 
 export interface CLIOptions {
   format: ReportFormat;
@@ -24,6 +26,8 @@ export interface CLIOptions {
   execute: boolean;
   /** Execute only safe tools (readOnlyHint=true) */
   executeSafe: boolean;
+  /** Standard to validate against */
+  standard: StandardName;
 }
 
 export interface ParsedArgs {
@@ -33,10 +37,11 @@ export interface ParsedArgs {
 
 export function parseArgs(argv: string[]): ParsedArgs {
   const program = new Command();
+  const standardNames = getStandardNames();
 
   program
     .name('chatgpt-app-check')
-    .description('Validate MCP servers against OpenAI Apps SDK requirements')
+    .description('Validate MCP servers against OpenAI Apps SDK or MCP Apps requirements')
     .version('0.1.0')
     .argument('<mcp-url>', 'URL of the MCP server endpoint')
     .option('-f, --format <format>', 'Output format: text, json, markdown, html, junit', 'text')
@@ -53,7 +58,8 @@ export function parseArgs(argv: string[]): ParsedArgs {
     .option('-H, --header <header>', 'Custom header as key:value (repeatable)', (val, prev: string[]) => {
       prev.push(val);
       return prev;
-    }, [] as string[]);
+    }, [] as string[])
+    .option(`-s, --standard <name>`, `Standard to validate against (${standardNames.join(', ')})`, 'openai');
 
   program.parse(argv);
 
@@ -93,6 +99,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
       headers,
       execute: opts.execute,
       executeSafe: opts.executeSafe,
+      standard: opts.standard as StandardName,
     },
   };
 }

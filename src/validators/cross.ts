@@ -4,10 +4,15 @@
 import { Validator } from './base.js';
 import type { ValidationContext } from './index.js';
 import type { CheckResult } from '../types/check.js';
+import type { StandardSpec } from '../standards/spec.js';
 
 export class CrossValidator extends Validator {
   name = 'cross';
   category = 'cross' as const;
+
+  constructor(spec: StandardSpec) {
+    super(spec);
+  }
 
   async run(ctx: ValidationContext): Promise<CheckResult[]> {
     const results: CheckResult[] = [];
@@ -22,8 +27,7 @@ export class CrossValidator extends Validator {
     // XVAL_001: Every outputTemplate URI exists in resources
     const outputTemplateUris: string[] = [];
     for (const tool of ctx.tools) {
-      const meta = this.getMeta(tool.raw);
-      const outputTemplate = meta?.['openai/outputTemplate'] as string | undefined;
+      const outputTemplate = this.getSpecPath(tool.raw, this.spec.toolMeta.outputTemplate) as string | undefined;
       if (outputTemplate) {
         outputTemplateUris.push(outputTemplate);
 
@@ -61,8 +65,6 @@ export class CrossValidator extends Validator {
     }
 
     // XVAL_003: Static assets in HTML are available
-    // This would require parsing HTML for src/href attributes
-    // Simplified: just note if we have resource contents
     if (ctx.resourceContents && ctx.resourceContents.size > 0) {
       results.push(this.pass('XVAL_003', 'Widget HTML content available for asset validation', {
         severity: 'warn',
@@ -72,7 +74,7 @@ export class CrossValidator extends Validator {
     // XVAL_004: Orphan resources (resources not referenced by any tool)
     const referencedUris = new Set(outputTemplateUris);
     const orphans = ctx.resources.filter(r =>
-      r.uri.startsWith('ui://widget/') && !referencedUris.has(r.uri)
+      this.spec.widgetUriPattern.test(r.uri) && !referencedUris.has(r.uri)
     );
 
     if (orphans.length === 0) {
@@ -90,12 +92,5 @@ export class CrossValidator extends Validator {
     }
 
     return results;
-  }
-
-  private getMeta(obj: unknown): Record<string, unknown> | undefined {
-    if (typeof obj === 'object' && obj !== null && '_meta' in obj) {
-      return (obj as Record<string, unknown>)._meta as Record<string, unknown>;
-    }
-    return undefined;
   }
 }

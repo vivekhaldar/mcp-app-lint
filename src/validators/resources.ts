@@ -1,14 +1,19 @@
-// ABOUTME: Validates resource descriptors against OpenAI Apps SDK requirements.
+// ABOUTME: Validates resource descriptors against standard-specific requirements.
 // ABOUTME: Ensures widget resources use correct URI scheme and MIME types.
 
 import { Validator } from './base.js';
 import type { ValidationContext } from './index.js';
 import type { CheckResult } from '../types/check.js';
 import type { Resource } from '../client/mcp.js';
+import type { StandardSpec } from '../standards/spec.js';
 
 export class ResourceValidator extends Validator {
   name = 'resources';
   category = 'resources' as const;
+
+  constructor(spec: StandardSpec) {
+    super(spec);
+  }
 
   async run(ctx: ValidationContext): Promise<CheckResult[]> {
     const results: CheckResult[] = [];
@@ -44,65 +49,70 @@ export class ResourceValidator extends Validator {
   private validateResource(resource: Resource): CheckResult[] {
     const results: CheckResult[] = [];
     const target = resource.uri;
-    const isWidget = resource.uri.startsWith('ui://widget/');
+    const isWidget = this.spec.widgetUriPattern.test(resource.uri);
 
     if (isWidget) {
-      // RES_002: Widget resource uses ui://widget/ URI scheme
-      results.push(this.pass('RES_002', 'Uses ui://widget/ URI scheme', {
+      // RES_002: Widget resource uses correct URI scheme
+      results.push(this.pass('RES_002', `Uses ${this.spec.widgetUriScheme} URI scheme`, {
         severity: 'error',
         target,
       }));
 
-      // RES_003: Widget has text/html+skybridge MIME type
-      if (resource.mimeType === 'text/html+skybridge') {
-        results.push(this.pass('RES_003', 'Has text/html+skybridge MIME type', {
+      // RES_003: Widget has correct MIME type
+      if (resource.mimeType === this.spec.widgetMimeType) {
+        results.push(this.pass('RES_003', `Has ${this.spec.widgetMimeType} MIME type`, {
           severity: 'error',
           target,
         }));
       } else {
         results.push(this.fail('RES_003', 'error',
-          `Widget MIME type should be text/html+skybridge, got: ${resource.mimeType}`, {
+          `Widget MIME type should be ${this.spec.widgetMimeType}, got: ${resource.mimeType}`, {
           target,
-          suggestion: 'Set mimeType to "text/html+skybridge" for widget resources',
+          suggestion: `Set mimeType to "${this.spec.widgetMimeType}" for widget resources`,
         }));
       }
 
-      // Widget-specific optional fields
-      const meta = this.getMeta(resource.raw);
-
+      // Widget-specific optional fields (only if paths exist in standard)
       // RES_006: widgetDescription
-      if (meta?.['openai/widgetDescription']) {
-        results.push(this.pass('RES_006', 'Has widgetDescription', {
-          severity: 'info',
-          target,
-        }));
+      if (this.spec.resourceMeta.widgetDescription) {
+        if (this.hasSpecPath(resource.raw, this.spec.resourceMeta.widgetDescription)) {
+          results.push(this.pass('RES_006', 'Has widgetDescription', {
+            severity: 'info',
+            target,
+          }));
+        }
       }
 
       // RES_007: widgetPrefersBorder
-      if (meta?.['openai/widgetPrefersBorder'] !== undefined) {
-        results.push(this.pass('RES_007', 'Has widgetPrefersBorder', {
-          severity: 'info',
-          target,
-        }));
+      if (this.spec.resourceMeta.widgetPrefersBorder) {
+        if (this.hasSpecPath(resource.raw, this.spec.resourceMeta.widgetPrefersBorder)) {
+          results.push(this.pass('RES_007', 'Has widgetPrefersBorder', {
+            severity: 'info',
+            target,
+          }));
+        }
       }
 
       // RES_008 & RES_009: widgetCSP
-      const csp = meta?.['openai/widgetCSP'] as Record<string, unknown> | undefined;
-      if (csp) {
-        results.push(this.pass('RES_008', 'Has widgetCSP configuration', {
-          severity: 'info',
-          target,
-          details: { csp },
-        }));
-
-        // RES_009: Warn if frame_domains is set
-        if (csp.frame_domains && Array.isArray(csp.frame_domains) && csp.frame_domains.length > 0) {
-          results.push(this.fail('RES_009', 'warn',
-            'Using frame_domains triggers stricter review process', {
+      if (this.spec.resourceMeta.csp) {
+        const csp = this.getSpecPath(resource.raw, this.spec.resourceMeta.csp) as Record<string, unknown> | undefined;
+        if (csp) {
+          results.push(this.pass('RES_008', 'Has CSP configuration', {
+            severity: 'info',
             target,
-            details: { frame_domains: csp.frame_domains },
-            suggestion: 'Only use frame_domains if iframes are essential',
+            details: { csp },
           }));
+
+          // RES_009: Warn if frame_domains is set
+          const frameDomains = csp[this.spec.cspFields.frameDomains];
+          if (frameDomains && Array.isArray(frameDomains) && frameDomains.length > 0) {
+            results.push(this.fail('RES_009', 'warn',
+              'Using frame domains triggers stricter review process', {
+              target,
+              details: { [this.spec.cspFields.frameDomains]: frameDomains },
+              suggestion: 'Only use frame domains if iframes are essential',
+            }));
+          }
         }
       }
     }
@@ -129,12 +139,5 @@ export class ResourceValidator extends Validator {
     }
 
     return results;
-  }
-
-  private getMeta(obj: unknown): Record<string, unknown> | undefined {
-    if (typeof obj === 'object' && obj !== null && '_meta' in obj) {
-      return (obj as Record<string, unknown>)._meta as Record<string, unknown>;
-    }
-    return undefined;
   }
 }

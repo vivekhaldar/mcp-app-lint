@@ -10,8 +10,9 @@ export class MarkdownReporter implements Reporter {
     const lines: string[] = [];
 
     // Header
-    lines.push('# ChatGPT Apps SDK Conformance Report');
+    lines.push(`# ${report.standardName} Conformance Report`);
     lines.push('');
+    lines.push(`**Standard:** ${report.standardName}`);
     lines.push(`**Server:** ${report.serverUrl}`);
     lines.push(`**Timestamp:** ${report.timestamp}`);
     lines.push(`**Duration:** ${report.durationMs}ms`);

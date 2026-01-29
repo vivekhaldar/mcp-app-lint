@@ -11,9 +11,10 @@ export class TextReporter implements Reporter {
     const lines: string[] = [];
 
     // Header
-    lines.push(chalk.bold('ChatGPT Apps SDK Conformance Report'));
+    lines.push(chalk.bold(`${report.standardName} Conformance Report`));
     lines.push('='.repeat(70));
     lines.push('');
+    lines.push(`Standard: ${report.standardName}`);
     lines.push(`Server: ${report.serverUrl}`);
     if (report.serverInfo.protocolVersion) {
       lines.push(`Protocol Version: ${report.serverInfo.protocolVersion}`);

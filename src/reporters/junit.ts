@@ -11,7 +11,7 @@ export class JUnitReporter implements Reporter {
     const tests = report.summary.totalChecks;
 
     let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
-    xml += `<testsuite name="ChatGPT Apps SDK Conformance" tests="${tests}" failures="${failures + warnings}" time="${report.durationMs / 1000}">\n`;
+    xml += `<testsuite name="${this.escape(report.standardName)} Conformance" tests="${tests}" failures="${failures + warnings}" time="${report.durationMs / 1000}">\n`;
 
     for (const check of report.checks) {
       const className = `conformance.${check.category}`;

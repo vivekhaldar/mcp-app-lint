@@ -1,14 +1,19 @@
-// ABOUTME: Validates tool descriptors against OpenAI Apps SDK requirements.
+// ABOUTME: Validates tool descriptors against standard-specific requirements.
 // ABOUTME: Checks for required fields, metadata, and proper formatting.
 
 import { Validator } from './base.js';
 import type { ValidationContext } from './index.js';
 import type { CheckResult } from '../types/check.js';
 import type { Tool } from '../client/mcp.js';
+import type { StandardSpec } from '../standards/spec.js';
 
 export class ToolValidator extends Validator {
   name = 'tools';
   category = 'tools' as const;
+
+  constructor(spec: StandardSpec) {
+    super(spec);
+  }
 
   async run(ctx: ValidationContext): Promise<CheckResult[]> {
     const results: CheckResult[] = [];
@@ -89,21 +94,21 @@ export class ToolValidator extends Validator {
       results.push(this.fail('TOOL_005', 'error', 'Missing inputSchema', { target }));
     }
 
-    // Access _meta for OpenAI-specific fields
-    const meta = this.getMetaField(tool.raw, '_meta') as Record<string, unknown> | undefined;
+    // TOOL_007: Has output template (path varies by standard)
+    const outputTemplatePath = this.spec.toolMeta.outputTemplate;
+    const outputTemplate = this.getSpecPath(tool.raw, outputTemplatePath) as string | undefined;
 
-    // TOOL_007: Has _meta.openai/outputTemplate (CRITICAL)
-    const outputTemplate = meta?.['openai/outputTemplate'] as string | undefined;
     if (outputTemplate) {
-      results.push(this.pass('TOOL_007', 'Has _meta.openai/outputTemplate', {
+      const fieldName = this.getShortFieldName(outputTemplatePath);
+      results.push(this.pass('TOOL_007', `Has ${fieldName}`, {
         severity: 'error',
         target,
         details: { outputTemplate },
       }));
 
-      // TOOL_008: outputTemplate uses ui://widget/ scheme (CRITICAL)
-      if (outputTemplate.startsWith('ui://widget/')) {
-        results.push(this.pass('TOOL_008', 'outputTemplate uses ui://widget/ scheme', {
+      // TOOL_008: outputTemplate uses correct URI scheme
+      if (this.spec.widgetUriPattern.test(outputTemplate)) {
+        results.push(this.pass('TOOL_008', `outputTemplate uses ${this.spec.widgetUriScheme} scheme`, {
           severity: 'error',
           target,
         }));
@@ -123,23 +128,26 @@ export class ToolValidator extends Validator {
         }
       } else {
         results.push(this.fail('TOOL_008', 'error',
-          `outputTemplate must use ui://widget/ scheme, got: ${outputTemplate}`, {
+          `outputTemplate must use ${this.spec.widgetUriScheme} scheme, got: ${outputTemplate}`, {
           target,
-          suggestion: 'Change outputTemplate to use ui://widget/your-widget.html format',
+          suggestion: `Change outputTemplate to use ${this.spec.widgetUriScheme}your-widget.html format`,
         }));
       }
     } else {
+      const fieldName = this.getShortFieldName(outputTemplatePath);
       results.push(this.fail('TOOL_007', 'error',
-        'Missing _meta.openai/outputTemplate (required for ChatGPT Apps)', {
+        `Missing ${fieldName} (required for ${this.spec.displayName})`, {
         target,
-        suggestion: 'Add _meta: { "openai/outputTemplate": "ui://widget/your-widget.html" }',
-        specRef: 'https://developers.openai.com/apps-sdk/build/mcp-server',
+        suggestion: `Add ${outputTemplatePath.replace('_meta.', '_meta: { ').replace(/\./g, ': { ')}": "${this.spec.widgetUriScheme}your-widget.html"${' }'.repeat(outputTemplatePath.split('.').length - 1)}`,
+        specRef: this.spec.specRef,
       }));
     }
 
-    // TOOL_010-016: Optional fields (INFO level)
-    this.checkOptionalMeta(results, meta, target, 'openai/widgetAccessible', 'TOOL_010');
-    this.checkOptionalMeta(results, meta, target, 'openai/visibility', 'TOOL_011');
+    // TOOL_010-016: Optional fields (INFO level) - only check if path exists in standard
+    this.checkOptionalMeta(results, tool.raw, target,
+      this.spec.toolMeta.widgetAccessible, 'TOOL_010', 'widgetAccessible');
+    this.checkOptionalMeta(results, tool.raw, target,
+      this.spec.toolMeta.visibility, 'TOOL_011', 'visibility');
 
     // TOOL_012: title field (on tool itself, not _meta)
     const title = this.getMetaField(tool.raw, 'title');
@@ -149,29 +157,31 @@ export class ToolValidator extends Validator {
       results.push(this.fail('TOOL_012', 'info', 'Missing title field (optional)', { target }));
     }
 
-    // TOOL_013-014: toolInvocation fields
-    const invocation = meta?.['openai/toolInvocation'] as Record<string, unknown> | undefined;
-    if (invocation?.invoking) {
-      const invoking = invocation.invoking as string;
-      if (invoking.length <= 64) {
-        results.push(this.pass('TOOL_013', 'Has toolInvocation/invoking', {
-          severity: 'info', target, details: { invoking }
-        }));
-      } else {
-        results.push(this.fail('TOOL_013', 'info',
-          `toolInvocation/invoking exceeds 64 chars (${invoking.length})`, { target }));
+    // TOOL_013-014: toolInvocation fields (only if path exists in standard)
+    if (this.spec.toolMeta.toolInvocation) {
+      const invocation = this.getSpecPath(tool.raw, this.spec.toolMeta.toolInvocation) as Record<string, unknown> | undefined;
+      if (invocation?.invoking) {
+        const invoking = invocation.invoking as string;
+        if (invoking.length <= 64) {
+          results.push(this.pass('TOOL_013', 'Has toolInvocation/invoking', {
+            severity: 'info', target, details: { invoking }
+          }));
+        } else {
+          results.push(this.fail('TOOL_013', 'info',
+            `toolInvocation/invoking exceeds 64 chars (${invoking.length})`, { target }));
+        }
       }
-    }
 
-    if (invocation?.invoked) {
-      const invoked = invocation.invoked as string;
-      if (invoked.length <= 64) {
-        results.push(this.pass('TOOL_014', 'Has toolInvocation/invoked', {
-          severity: 'info', target, details: { invoked }
-        }));
-      } else {
-        results.push(this.fail('TOOL_014', 'info',
-          `toolInvocation/invoked exceeds 64 chars (${invoked.length})`, { target }));
+      if (invocation?.invoked) {
+        const invoked = invocation.invoked as string;
+        if (invoked.length <= 64) {
+          results.push(this.pass('TOOL_014', 'Has toolInvocation/invoked', {
+            severity: 'info', target, details: { invoked }
+          }));
+        } else {
+          results.push(this.fail('TOOL_014', 'info',
+            `toolInvocation/invoked exceeds 64 chars (${invoked.length})`, { target }));
+        }
       }
     }
 
@@ -185,14 +195,16 @@ export class ToolValidator extends Validator {
       }));
     }
 
-    // TOOL_016: fileParams
-    const fileParams = meta?.['openai/fileParams'];
-    if (fileParams) {
-      results.push(this.pass('TOOL_016', 'Has fileParams for file handling', {
-        severity: 'info',
-        target,
-        details: { fileParams },
-      }));
+    // TOOL_016: fileParams (only if path exists in standard)
+    if (this.spec.toolMeta.fileParams) {
+      const fileParams = this.getSpecPath(tool.raw, this.spec.toolMeta.fileParams);
+      if (fileParams) {
+        results.push(this.pass('TOOL_016', 'Has fileParams for file handling', {
+          severity: 'info',
+          target,
+          details: { fileParams },
+        }));
+      }
     }
 
     return results;
@@ -207,17 +219,27 @@ export class ToolValidator extends Validator {
 
   private checkOptionalMeta(
     results: CheckResult[],
-    meta: Record<string, unknown> | undefined,
+    raw: unknown,
     target: string,
-    field: string,
-    checkId: string
+    path: string,
+    checkId: string,
+    displayName: string
   ): void {
-    if (meta?.[field] !== undefined) {
-      results.push(this.pass(checkId, `Has ${field}`, {
+    // Skip if this field isn't in the current standard
+    if (!path) return;
+
+    if (this.hasSpecPath(raw, path)) {
+      results.push(this.pass(checkId, `Has ${displayName}`, {
         severity: 'info',
         target,
-        details: { [field]: meta[field] },
+        details: { [displayName]: this.getSpecPath(raw, path) },
       }));
     }
+  }
+
+  /** Extract a short field name from a path like "_meta.openai/outputTemplate" */
+  private getShortFieldName(path: string): string {
+    const parts = path.split('.');
+    return parts[parts.length - 1];
   }
 }

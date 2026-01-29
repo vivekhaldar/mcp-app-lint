@@ -12,6 +12,8 @@ import { ExecutionValidator } from './validators/execution.js';
 import { ContentValidator } from './validators/content.js';
 import { CrossValidator } from './validators/cross.js';
 import { ReporterFactory } from './reporters/index.js';
+import { getStandard, OPENAI_STANDARD } from './standards/index.js';
+import type { StandardSpec } from './standards/spec.js';
 import type { ConformanceReport, Verdict, ToolInfo, ResourceInfo } from './types/report.js';
 import type { CheckResult } from './types/check.js';
 import chalk from 'chalk';
@@ -27,6 +29,9 @@ async function main(): Promise<number> {
     chalk.level = 0;
   }
 
+  // Get the selected standard spec
+  const spec = getStandard(options.standard) ?? OPENAI_STANDARD;
+
   // Create client with auth headers if provided
   const client = new MCPClient({
     url,
@@ -34,14 +39,14 @@ async function main(): Promise<number> {
     headers: options.headers,
   });
 
-  // Build validator pipeline
+  // Build validator pipeline with the selected spec
   const validators = [
-    new ProtocolValidator(),
-    new ToolValidator(),
-    new ResourceValidator(),
-    new ExecutionValidator(),
-    new ContentValidator(),
-    new CrossValidator(),
+    new ProtocolValidator(spec),
+    new ToolValidator(spec),
+    new ResourceValidator(spec),
+    new ExecutionValidator(spec),
+    new ContentValidator(spec),
+    new CrossValidator(spec),
   ];
 
   // Run validation
@@ -73,7 +78,7 @@ async function main(): Promise<number> {
 
   // Build report using context data
   const endTime = Date.now();
-  const report = buildReport(url, checks, endTime - startTime, ctx);
+  const report = buildReport(url, checks, endTime - startTime, ctx, spec);
 
   // Format and output
   const reporter = await ReporterFactory.create(options.format);
@@ -103,7 +108,8 @@ function buildReport(
   url: string,
   checks: CheckResult[],
   durationMs: number,
-  ctx: ValidationContext
+  ctx: ValidationContext,
+  spec: StandardSpec
 ): ConformanceReport {
   const errors = checks.filter(c => !c.passed && c.severity === 'error').length;
   const warnings = checks.filter(c => !c.passed && c.severity === 'warn').length;
@@ -123,9 +129,9 @@ function buildReport(
   const serverInfo = ctx.serverInfo ?? {};
 
   // Build tool and resource info from context
+  const outputTemplatePath = spec.toolMeta.outputTemplate;
   const tools: ToolInfo[] = (ctx.tools ?? []).map(t => {
-    const meta = getMeta(t.raw);
-    const outputTemplate = meta?.['openai/outputTemplate'] as string | undefined;
+    const outputTemplate = getPath(t.raw, outputTemplatePath) as string | undefined;
     return {
       name: t.name,
       description: t.description,
@@ -138,13 +144,16 @@ function buildReport(
     uri: r.uri,
     name: r.name,
     mimeType: r.mimeType,
-    isWidget: r.uri.startsWith('ui://widget/'),
+    isWidget: spec.widgetUriPattern.test(r.uri),
   }));
 
   return {
     serverUrl: url,
     timestamp: new Date().toISOString(),
     durationMs,
+    standard: spec.name,
+    standardName: spec.displayName,
+    specRef: spec.specRef,
     serverInfo: serverInfo as ConformanceReport['serverInfo'],
     summary: {
       totalChecks: checks.length,
@@ -162,11 +171,20 @@ function buildReport(
   };
 }
 
-function getMeta(obj: unknown): Record<string, unknown> | undefined {
-  if (typeof obj === 'object' && obj !== null && '_meta' in obj) {
-    return (obj as Record<string, unknown>)._meta as Record<string, unknown>;
+/** Get a value from an object using a dot-notation path */
+function getPath(obj: unknown, path: string): unknown {
+  if (!path || typeof obj !== 'object' || obj === null) {
+    return undefined;
   }
-  return undefined;
+  const parts = path.split('.');
+  let current: unknown = obj;
+  for (const part of parts) {
+    if (typeof current !== 'object' || current === null) {
+      return undefined;
+    }
+    current = (current as Record<string, unknown>)[part];
+  }
+  return current;
 }
 
 main()

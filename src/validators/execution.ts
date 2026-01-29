@@ -1,13 +1,18 @@
-// ABOUTME: Validates tool execution responses meet OpenAI Apps SDK format.
+// ABOUTME: Validates tool execution responses meet standard-specific format.
 // ABOUTME: Calls each tool and checks response structure.
 
 import { Validator } from './base.js';
 import type { ValidationContext } from './index.js';
 import type { CheckResult } from '../types/check.js';
+import type { StandardSpec } from '../standards/spec.js';
 
 export class ExecutionValidator extends Validator {
   name = 'execution';
   category = 'execution' as const;
+
+  constructor(spec: StandardSpec) {
+    super(spec);
+  }
 
   async run(ctx: ValidationContext): Promise<CheckResult[]> {
     const results: CheckResult[] = [];

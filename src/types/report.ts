@@ -33,6 +33,13 @@ export interface ConformanceReport {
   timestamp: string;
   durationMs: number;
 
+  /** Internal standard identifier (e.g., 'openai', 'mcp-apps') */
+  standard: string;
+  /** Human-readable standard name (e.g., 'OpenAI Apps SDK') */
+  standardName: string;
+  /** URL to specification documentation */
+  specRef: string;
+
   serverInfo: ServerInfo;
 
   summary: {
