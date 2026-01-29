@@ -40,7 +40,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
   const standardNames = getStandardNames();
 
   program
-    .name('chatgpt-app-check')
+    .name('mcp-app-lint')
     .description('Validate MCP servers against OpenAI Apps SDK or MCP Apps requirements')
     .version('0.1.0')
     .argument('<mcp-url>', 'URL of the MCP server endpoint')

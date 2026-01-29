@@ -53,7 +53,7 @@ export class MCPClient {
   constructor(config: MCPClientConfig) {
     this.config = config;
     this.client = new Client({
-      name: 'chatgpt-app-check',
+      name: 'mcp-app-lint',
       version: '0.1.0',
     });
   }

@@ -39,7 +39,7 @@ cd ~/repos/3p/pomodoro-timer-test/mcp-server && node server.mjs
 # Server runs at http://127.0.0.1:8000/mcp
 
 # Test (should pass)
-./bin/chatgpt-app-check http://127.0.0.1:8000/mcp --standard openai
+./bin/mcp-app-lint http://127.0.0.1:8000/mcp --standard openai
 ```
 
 ### MCP Apps Server (Quickstart)
@@ -48,7 +48,7 @@ cd ~/repos/3p/ext-apps/examples/quickstart && pnpm start
 # Server runs at http://localhost:3001/mcp
 
 # Test (should pass)
-./bin/chatgpt-app-check http://localhost:3001/mcp --standard mcp-apps
+./bin/mcp-app-lint http://localhost:3001/mcp --standard mcp-apps
 ```
 
 ## Development

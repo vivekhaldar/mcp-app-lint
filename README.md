@@ -1,6 +1,6 @@
-# chatgpt-app-conformance
+# mcp-app-lint
 
-CLI tool to validate MCP servers against [OpenAI Apps SDK](https://developers.openai.com/apps-sdk/build/mcp-server) or [MCP Apps (SEP-1865)](https://github.com/anthropics/mcp-specification/blob/main/docs/specification/extensions/apps/sep-1865.md) requirements.
+A linter for MCP servers that implement UI widgets. Validates against [OpenAI Apps SDK](https://developers.openai.com/apps-sdk/build/mcp-server) (ChatGPT Apps) or [MCP Apps (SEP-1865)](https://github.com/anthropics/mcp-specification/blob/main/docs/specification/extensions/apps/sep-1865.md) requirements.
 
 ## Installation
 
@@ -13,16 +13,16 @@ pnpm build
 
 ```bash
 # Validate against OpenAI Apps SDK (default)
-./bin/chatgpt-app-check http://localhost:8000/mcp
+./bin/mcp-app-lint http://localhost:8000/mcp
 
 # Validate against MCP Apps (SEP-1865)
-./bin/chatgpt-app-check http://localhost:8000/mcp --standard mcp-apps
+./bin/mcp-app-lint http://localhost:8000/mcp --standard mcp-apps
 
 # Output formats: text (default), json, html, markdown, junit
-./bin/chatgpt-app-check http://localhost:8000/mcp --format html -o report.html
+./bin/mcp-app-lint http://localhost:8000/mcp --format html -o report.html
 
 # Enable tool execution testing
-./bin/chatgpt-app-check http://localhost:8000/mcp --execute-safe
+./bin/mcp-app-lint http://localhost:8000/mcp --execute-safe
 ```
 
 ## Standards Supported

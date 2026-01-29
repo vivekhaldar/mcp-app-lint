@@ -1,9 +1,9 @@
 {
-  "name": "chatgpt-app-check",
+  "name": "mcp-app-lint",
   "version": "0.1.0",
   "type": "module",
   "bin": {
-    "chatgpt-app-check": "./dist/index.js"
+    "mcp-app-lint": "./dist/index.js"
   },
   "scripts": {
     "build": "tsc",

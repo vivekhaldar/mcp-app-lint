@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ABOUTME: CLI entry point for chatgpt-app-check.
+// ABOUTME: CLI entry point for mcp-app-lint.
 // ABOUTME: Orchestrates validation pipeline and outputs report.
 
 import { parseArgs, toValidatorConfig } from './cli/args.js';
