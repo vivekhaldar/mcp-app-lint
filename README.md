@@ -2,6 +2,10 @@
 
 A linter for MCP servers that implement UI widgets. Validates against [OpenAI Apps SDK](https://developers.openai.com/apps-sdk/build/mcp-server) (ChatGPT Apps) or [MCP Apps (SEP-1865)](https://github.com/anthropics/mcp-specification/blob/main/docs/specification/extensions/apps/sep-1865.md) requirements.
 
+## Why
+
+Building a ChatGPT App or MCP App with agentic coding? Tell your coding agent to run `mcp-app-lint` against the MCP server it just built. It'll catch missing metadata fields, wrong MIME types, broken widget URIs, and other conformance issues before you submit for review -- no manual spec-reading required.
+
 ## Installation
 
 ```bash
