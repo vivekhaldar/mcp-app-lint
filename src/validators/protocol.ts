@@ -4,15 +4,10 @@
 import { Validator } from './base.js';
 import type { ValidationContext } from './index.js';
 import type { CheckResult } from '../types/check.js';
-import type { StandardSpec } from '../standards/spec.js';
 
 export class ProtocolValidator extends Validator {
   name = 'protocol';
   category = 'protocol' as const;
-
-  constructor(spec: StandardSpec) {
-    super(spec);
-  }
 
   async run(ctx: ValidationContext): Promise<CheckResult[]> {
     const results: CheckResult[] = [];

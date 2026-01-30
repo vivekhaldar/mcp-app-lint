@@ -12,7 +12,7 @@ import { ExecutionValidator } from './validators/execution.js';
 import { ContentValidator } from './validators/content.js';
 import { CrossValidator } from './validators/cross.js';
 import { ReporterFactory } from './reporters/index.js';
-import { getStandard, OPENAI_STANDARD } from './standards/index.js';
+import { getStandard, OPENAI_STANDARD, getPath } from './standards/index.js';
 import type { StandardSpec } from './standards/spec.js';
 import type { ConformanceReport, Verdict, ToolInfo, ResourceInfo } from './types/report.js';
 import type { CheckResult } from './types/check.js';
@@ -169,22 +169,6 @@ function buildReport(
     tools,
     resources,
   };
-}
-
-/** Get a value from an object using a dot-notation path */
-function getPath(obj: unknown, path: string): unknown {
-  if (!path || typeof obj !== 'object' || obj === null) {
-    return undefined;
-  }
-  const parts = path.split('.');
-  let current: unknown = obj;
-  for (const part of parts) {
-    if (typeof current !== 'object' || current === null) {
-      return undefined;
-    }
-    current = (current as Record<string, unknown>)[part];
-  }
-  return current;
 }
 
 main()

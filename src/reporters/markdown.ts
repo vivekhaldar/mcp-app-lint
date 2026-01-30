@@ -3,7 +3,7 @@
 
 import type { Reporter } from './index.js';
 import type { ConformanceReport } from '../types/report.js';
-import type { CheckResult } from '../types/check.js';
+import { groupByCategory } from './utils.js';
 
 export class MarkdownReporter implements Reporter {
   format(report: ConformanceReport): string {
@@ -47,7 +47,7 @@ export class MarkdownReporter implements Reporter {
     lines.push('');
 
     // Group checks by category
-    const categories = this.groupByCategory(report.checks);
+    const categories = groupByCategory(report.checks);
 
     for (const [category, checks] of Object.entries(categories)) {
       lines.push(`## ${category.charAt(0).toUpperCase() + category.slice(1)} Checks`);
@@ -77,16 +77,5 @@ export class MarkdownReporter implements Reporter {
     }
 
     return lines.join('\n');
-  }
-
-  private groupByCategory(checks: CheckResult[]): Record<string, CheckResult[]> {
-    const groups: Record<string, CheckResult[]> = {};
-    for (const check of checks) {
-      if (!groups[check.category]) {
-        groups[check.category] = [];
-      }
-      groups[check.category].push(check);
-    }
-    return groups;
   }
 }

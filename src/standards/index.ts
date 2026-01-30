@@ -4,7 +4,7 @@
 export type { StandardSpec } from './spec.js';
 export { OPENAI_STANDARD } from './openai.js';
 export { MCP_APPS_STANDARD } from './mcp-apps.js';
-export { getPath, hasPath, getTypedPath, isString, isRecord, isArray } from './accessor.js';
+export { getPath } from './accessor.js';
 
 import type { StandardSpec } from './spec.js';
 import { OPENAI_STANDARD } from './openai.js';
