@@ -5,15 +5,10 @@ import { Validator } from './base.js';
 import type { ValidationContext } from './index.js';
 import type { CheckResult } from '../types/check.js';
 import type { Resource } from '../client/mcp.js';
-import type { StandardSpec } from '../standards/spec.js';
 
 export class ResourceValidator extends Validator {
   name = 'resources';
   category = 'resources' as const;
-
-  constructor(spec: StandardSpec) {
-    super(spec);
-  }
 
   async run(ctx: ValidationContext): Promise<CheckResult[]> {
     const results: CheckResult[] = [];

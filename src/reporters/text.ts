@@ -5,6 +5,7 @@ import chalk from 'chalk';
 import type { Reporter } from './index.js';
 import type { ConformanceReport } from '../types/report.js';
 import type { CheckResult } from '../types/check.js';
+import { groupByCategory } from './utils.js';
 
 export class TextReporter implements Reporter {
   format(report: ConformanceReport): string {
@@ -27,7 +28,7 @@ export class TextReporter implements Reporter {
     lines.push('');
 
     // Group checks by category
-    const categories = this.groupByCategory(report.checks);
+    const categories = groupByCategory(report.checks);
 
     for (const [category, checks] of Object.entries(categories)) {
       lines.push('='.repeat(70));
@@ -84,24 +85,13 @@ export class TextReporter implements Reporter {
   private getStatusIcon(check: CheckResult): string {
     if (check.passed) {
       return check.severity === 'info' ? chalk.blue('[INFO]') : chalk.green('[PASS]');
-    } else {
-      switch (check.severity) {
-        case 'error': return chalk.red('[FAIL]');
-        case 'warn': return chalk.yellow('[WARN]');
-        case 'info': return chalk.blue('[INFO]');
-      }
     }
-  }
-
-  private groupByCategory(checks: CheckResult[]): Record<string, CheckResult[]> {
-    const groups: Record<string, CheckResult[]> = {};
-    for (const check of checks) {
-      if (!groups[check.category]) {
-        groups[check.category] = [];
-      }
-      groups[check.category].push(check);
+    switch (check.severity) {
+      case 'error': return chalk.red('[FAIL]');
+      case 'warn': return chalk.yellow('[WARN]');
+      case 'info': return chalk.blue('[INFO]');
+      default: return chalk.dim('[????]');
     }
-    return groups;
   }
 
   private groupByTarget(checks: CheckResult[]): Record<string, CheckResult[]> {

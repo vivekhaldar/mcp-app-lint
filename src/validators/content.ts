@@ -4,7 +4,6 @@
 import { Validator } from './base.js';
 import type { ValidationContext } from './index.js';
 import type { CheckResult } from '../types/check.js';
-import type { StandardSpec } from '../standards/spec.js';
 import * as htmlparser2 from 'htmlparser2';
 
 const BLOCKED_APIS = [
@@ -17,10 +16,6 @@ const BLOCKED_APIS = [
 export class ContentValidator extends Validator {
   name = 'content';
   category = 'content' as const;
-
-  constructor(spec: StandardSpec) {
-    super(spec);
-  }
 
   async run(ctx: ValidationContext): Promise<CheckResult[]> {
     const results: CheckResult[] = [];
